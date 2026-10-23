@@ -1,0 +1,332 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "QUANTLOG 1.0 API",
+    "version": "1.0.0",
+    "description": "Contrato de API para sincronización entre frontend QUANTLOG y backend MariaDB."
+  },
+  "servers": [
+    { "url": "http://127.0.0.1:8000", "description": "Local por defecto" }
+  ],
+  "security": [
+    { "bearerAuth": [] }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "opaque-token"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "required": ["ok", "service", "version", "db"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "service": { "type": "string", "enum": ["quantlog-api"] },
+          "version": { "type": "integer", "enum": [5] },
+          "db": { "type": "string", "enum": ["connected", "disconnected"] }
+        }
+      },
+      "Account": {
+        "type": "object",
+        "required": ["id", "name", "initialBalance"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "name": { "type": "string", "maxLength": 120 },
+          "initialBalance": { "type": "number" },
+          "riskPerTradePct": { "type": "number", "default": 1 },
+          "dailyLossLimitPct": { "type": "number", "default": 3 },
+          "weeklyLossLimitPct": { "type": "number", "default": 6 },
+          "maxTradesPerDay": { "type": "integer", "default": 0 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Instrument": {
+        "type": "object",
+        "required": ["symbol", "multiplier"],
+        "properties": {
+          "symbol": { "type": "string", "maxLength": 48 },
+          "multiplier": { "type": "number", "default": 1 },
+          "pipSize": { "type": "number", "nullable": true }
+        }
+      },
+      "Trade": {
+        "type": "object",
+        "required": ["id", "accountId", "datetime", "asset", "direction", "status"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "accountId": { "type": "string", "format": "uuid" },
+          "datetime": { "type": "string", "format": "date-time" },
+          "asset": { "type": "string", "maxLength": 64 },
+          "direction": { "type": "string", "enum": ["LONG", "SHORT"] },
+          "status": { "type": "string", "enum": ["closed", "open", "planned", "cancelled"] },
+          "entry": { "type": "number", "nullable": true },
+          "exit": { "type": "number", "nullable": true },
+          "stopLoss": { "type": "number", "nullable": true },
+          "takeProfit": { "type": "number", "nullable": true },
+          "size": { "type": "number", "default": 1 },
+          "commission": { "type": "number", "default": 0 },
+          "setup": { "type": "string", "nullable": true },
+          "session": { "type": "string", "nullable": true },
+          "notes": { "type": "string", "nullable": true },
+          "tags": { "type": "string", "nullable": true },
+          "errors": { "type": "string", "nullable": true },
+          "emotions": { "type": "string", "nullable": true },
+          "planFollowed": { "type": "boolean", "default": false },
+          "aplus": { "type": "boolean", "default": false },
+          "maePrice": { "type": "number", "nullable": true },
+          "mfePrice": { "type": "number", "nullable": true },
+          "screenshotId": { "type": "string", "nullable": true }
+        }
+      },
+      "Review": {
+        "type": "object",
+        "properties": {
+          "weekKey": { "type": "string", "format": "date" },
+          "grade": { "type": "string", "enum": ["A", "B", "C", "D"], "nullable": true },
+          "notes": { "type": "string", "nullable": true },
+          "lessons": { "type": "string", "nullable": true }
+        }
+      },
+      "FullState": {
+        "type": "object",
+        "required": ["version", "trades", "accounts", "instruments", "reviews"],
+        "properties": {
+          "version": { "type": "integer", "enum": [5] },
+          "trades": { "type": "array", "items": { "$ref": "#/components/schemas/Trade" } },
+          "accounts": { "type": "array", "items": { "$ref": "#/components/schemas/Account" } },
+          "instruments": { "type": "array", "items": { "$ref": "#/components/schemas/Instrument" } },
+          "settings": {
+            "type": "object",
+            "properties": {
+              "activeAccountId": { "type": "string", "format": "uuid" }
+            }
+          },
+          "reviews": {
+            "type": "object",
+            "additionalProperties": { "$ref": "#/components/schemas/Review" }
+          }
+        }
+      },
+      "PushResponse": {
+        "type": "object",
+        "required": ["ok", "imported"],
+        "properties": {
+          "ok": { "type": "boolean" },
+          "imported": {
+            "type": "object",
+            "properties": {
+              "accounts": { "type": "integer" },
+              "instruments": { "type": "integer" },
+              "trades": { "type": "integer" },
+              "reviews": { "type": "integer" }
+            }
+          },
+          "error": { "type": "string", "nullable": true }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["ok", "error"],
+        "properties": {
+          "ok": { "type": "boolean", "enum": [false] },
+          "error": { "type": "string" },
+          "details": { "type": "object", "nullable": true }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/v1/health": {
+      "get": {
+        "summary": "Healthcheck",
+        "operationId": "health",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Servicio vivo",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/HealthResponse" } } }
+          },
+          "500": {
+            "description": "Error interno",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/state": {
+      "get": {
+        "summary": "Obtener estado completo",
+        "operationId": "getState",
+        "responses": {
+          "200": {
+            "description": "Estado completo",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FullState" } } }
+          }
+        }
+      },
+      "put": {
+        "summary": "Reemplazo transaccional del estado completo",
+        "operationId": "putState",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FullState" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Importación exitosa",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PushResponse" } } }
+          },
+          "400": {
+            "description": "Payload inválido",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          },
+          "500": {
+            "description": "Error de BD",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+          }
+        }
+      }
+    },
+    "/api/v1/trades/upsert": {
+      "post": {
+        "summary": "Upsert de un trade (opcional)",
+        "operationId": "upsertTrade",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Trade" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Trade guardado",
+            "content": { "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ok": { "type": "boolean" },
+                  "id": { "type": "string" },
+                  "action": { "type": "string", "enum": ["created", "updated"] }
+                }
+              }
+            } }
+          }
+        }
+      }
+    },
+    "/api/v1/trades/{id}": {
+      "delete": {
+        "summary": "Soft delete de un trade (opcional)",
+        "operationId": "deleteTrade",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trade eliminado",
+            "content": { "application/json": {
+              "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } }
+            } }
+          }
+        }
+      }
+    },
+    "/api/v1/reviews/upsert": {
+      "post": {
+        "summary": "Upsert de revisión semanal (opcional)",
+        "operationId": "upsertReview",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Review" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Review guardada",
+            "content": { "application/json": {
+              "schema": { "type": "object", "properties": { "ok": { "type": "boolean" } } }
+            } }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/overtrading": {
+      "get": {
+        "summary": "Días con overtrading (opcional, usa vista SQL)",
+        "operationId": "analyticsOvertrading",
+        "responses": {
+          "200": {
+            "description": "Lista de días",
+            "content": { "application/json": {
+              "schema": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Review" }
+              }
+            } }
+          }
+        }
+      }
+    },
+    "/api/v1/analytics/revenge": {
+      "get": {
+        "summary": "Trades de revenge (opcional, usa vista SQL)",
+        "operationId": "analyticsRevenge",
+        "responses": {
+          "200": {
+            "description": "Lista de trades revenge",
+            "content": { "application/json": {
+              "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Trade" } }
+            } }
+          }
+        }
+      }
+    }
+  },
+  "cors": {
+    "allow_origins": ["http://localhost", "http://127.0.0.1", "file://", "null"],
+    "allow_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    "allow_headers": ["Content-Type", "Authorization"],
+    "allow_credentials": false
+  },
+  "mapping": {
+    "description": "Mapeo camelCase (frontend) → snake_case (SQL)",
+    "accounts": {
+      "initialBalance": "initial_balance",
+      "riskPerTradePct": "risk_per_trade_pct",
+      "dailyLossLimitPct": "daily_loss_limit_pct",
+      "weeklyLossLimitPct": "weekly_loss_limit_pct",
+      "maxTradesPerDay": "max_trades_per_day",
+      "createdAt": "created_at",
+      "updatedAt": "updated_at",
+      "deletedAt": "deleted_at"
+    },
+    "instruments": {
+      "pipSize": "pip_size",
+      "createdAt": "created_at",
+      "updatedAt": "updated_at",
+      "deletedAt": "deleted_at"
+    },
+    "trades": {
+      "accountId": "account_id",
+      "instrumentSymbol": "instrument_symbol",
+      "datetime": "datetime",
+      "entry": "entry_price",
+      "exit": "exit_price",
+      "stopLoss": "stop_loss",
+      "takeProfit": "take_profit",
+      "planFollowed": "plan_followed",
+      "maePrice": "mae_price",
+      "mfePrice": "mfe_price",
+      "screenshotId": "screenshot_id",
+      "createdAt": "created_at",
+      "updatedAt": "updated_at",
+      "deletedAt": "deleted_at"
+    },
+    "reviews": {
+      "weekKey": "week_key",
+      "createdAt": "created_at",
+      "updatedAt": "updated_at"
+    }
+  }
+}
