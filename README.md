@@ -16,7 +16,7 @@ El sistema implementa una arquitectura **CQRS (Command Query Responsibility Segr
 
 ## ⚙️ Instalación y Despliegue Local
 ```bash
-git clone https://github.com/TU_USUARIO/quantlog.git
+git clone https://github.com/danielonxp-sys/QUANTLOG.git
 cd quantlog/backend
 python -m venv venv
 source venv/bin/activate
